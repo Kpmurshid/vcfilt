@@ -1,0 +1,29 @@
+# Compiled binary (root level only)
+/vcfilt
+/vcfilt.exe
+dist/
+
+# Large test data (not committed — download separately)
+final_test/
+testdata/large.vcf
+testdata/large.vcf.gz
+testdata/PWES159_U545889_KKP_TSVC_variants_IonXpress_042.vcf
+testdata/PWES159_U545889_KKP_TSVC_variants_IonXpress_042.vcf.gz
+testdata/DJ.dv.vcf.gz
+testdata/out_*.vcf
+/tmp/
+
+# Go build cache
+*.test
+*.prof
+*.out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
