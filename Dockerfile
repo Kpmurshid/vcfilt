@@ -11,8 +11,10 @@ RUN go mod download
 COPY . .
 
 # Build static binary (CGO disabled for minimal Alpine runtime)
+ARG VERSION=dev
+
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w -X main.Version=$(git describe --tags --always 2>/dev/null || echo dev)" \
+    go build -ldflags="-s -w -X main.Version=$VERSION" \
     -o vcfilt ./cmd/vcfilt/
 
 # ── Stage 2: Minimal runtime ──────────────────────────────────────────────────
