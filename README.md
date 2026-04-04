@@ -490,8 +490,8 @@ vcfilt filter \
 |----|------|----------|----------------|--------|--------|
 | A | `ALL.chr20.*.vcf.gz` | 1,817,492 | 294 MB | BGZF VCFv4.3 | 1000 Genomes Phase 3 (GRCh38) |
 | B | `large.vcf` | 1,000,000 | 92 MB | Plain VCFv4.1 | Synthetic (gen_test_vcf.py) |
-| C | `PWES159.vcf` | 38,859 | 20 MB | Plain VCFv4.1 | IonTorrent TSVC (clinical WES) |
-| D | `DJ.dv.vcf.gz` | 35,000 | — | BGZF VCFv4.2 | DeepVariant germline |
+| C | `XX159.vcf` | 38,859 | 20 MB | Plain VCFv4.1 | IonTorrent TSVC (clinical WES) |
+| D | `XX.vcf.gz` | 35,000 | — | BGZF VCFv4.2 | DeepVariant germline |
 
 **Hardware:** AMD EPYC 9224, 48 logical CPUs (24 cores × 2-way SMT), 503 GB RAM,
 Linux 6.8. All tools executed within Singularity containers.
