@@ -44,9 +44,9 @@ vcfilt filter --input variants.vcf.gz --output filtered.vcf --dp-min 10 --af-max
 
 ## Table of Contents
 
-1. [Performance Summary](#1-performance-summary)
-2. [Installation](#2-installation)
-3. [Command Reference](#3-command-reference)
+1. [Installation](#2-installation)
+2. [Command Reference](#3-command-reference) 
+3. [Performance Summary](#1-performance-summary)
 4. [Real-World Usage Examples](#4-real-world-usage-examples)
 5. [Filter Semantics](#5-filter-semantics)
 6. [Deterministic Parallel Output](#6-deterministic-parallel-output)
@@ -64,38 +64,7 @@ vcfilt filter --input variants.vcf.gz --output filtered.vcf --dp-min 10 --af-max
 
 ---
 
-## 1. Performance Summary
-
-**Dataset:** 1000 Genomes Project chr20 — 1,817,492 variants, 294 MB
-BGZF-compressed VCFv4.3 (`ALL.chr20.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz`)  
-**Filter applied:** `INFO/DP ≥ 10,000 AND INFO/AF ≤ 0.05`  
-**Result:** 1,634,404 variants pass (all tools agree)  
-**Hardware:** AMD EPYC 9224, 48 logical CPUs (24 cores × 2-way SMT), Linux 6.8
-
-| Tool | Version | Threads used | Wall time | Output variants |
-|------|---------|-------------|-----------|----------------|
-| **vcfilt** | 1.0.0 | 4 | **18.6 s** | 1,634,404 |
-| GATK SelectVariants | 4.6.2 | 1 | 42.7 s | 1,634,404 |
-| bcftools view | 1.22 | 1–16 | 134–137 s | 1,634,404 |
-| SnpSift filter | 5.3 | 1 | 187.9 s | 1,634,404 |
-| vcftools | 0.1.16 | — | **FAILS** | — |
-
-Notes:
-- bcftools was tested with `--threads 1`, `4`, `8`, and `16`; wall time was
-  134–137 s across all thread counts. bcftools `--threads` parallelises BGZF
-  decompression only, not filter evaluation.
-- vcftools fails with: `Error: VCF version must be v4.0, v4.1 or v4.2`. It does
-  not support VCFv4.3.
-- GATK requires two commands (`VariantFiltration` then `SelectVariants`); time
-  shown is end-to-end for both steps.
-- All tools run inside Singularity containers on identical hardware.
-
-See [Section 10](#10-benchmarks) and [`BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md)
-for multi-dataset results and thread-scaling data.
-
----
-
-## 2. Installation
+## 1. Installation
 
 ### Pre-built binary
 
@@ -144,7 +113,7 @@ go build -o vcfilt ./cmd/vcfilt/
 
 ---
 
-## 3. Command Reference
+## 2. Command Reference
 
 ```
 vcfilt filter [flags]
@@ -188,6 +157,37 @@ Passing a negative value also disables the filter.
 |------|---------|
 | `0` | Success |
 | `1` | Fatal error (file not found, unsupported format, indexing failure, pipeline error) |
+
+---
+
+## 3. Performance Summary
+
+**Dataset:** 1000 Genomes Project chr20 — 1,817,492 variants, 294 MB
+BGZF-compressed VCFv4.3 (`ALL.chr20.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz`)  
+**Filter applied:** `INFO/DP ≥ 10,000 AND INFO/AF ≤ 0.05`  
+**Result:** 1,634,404 variants pass (all tools agree)  
+**Hardware:** AMD EPYC 9224, 48 logical CPUs (24 cores × 2-way SMT), Linux 6.8
+
+| Tool | Version | Threads used | Wall time | Output variants |
+|------|---------|-------------|-----------|----------------|
+| **vcfilt** | 1.0.0 | 4 | **18.6 s** | 1,634,404 |
+| GATK SelectVariants | 4.6.2 | 1 | 42.7 s | 1,634,404 |
+| bcftools view | 1.22 | 1–16 | 134–137 s | 1,634,404 |
+| SnpSift filter | 5.3 | 1 | 187.9 s | 1,634,404 |
+| vcftools | 0.1.16 | — | **FAILS** | — |
+
+Notes:
+- bcftools was tested with `--threads 1`, `4`, `8`, and `16`; wall time was
+  134–137 s across all thread counts. bcftools `--threads` parallelises BGZF
+  decompression only, not filter evaluation.
+- vcftools fails with: `Error: VCF version must be v4.0, v4.1 or v4.2`. It does
+  not support VCFv4.3.
+- GATK requires two commands (`VariantFiltration` then `SelectVariants`); time
+  shown is end-to-end for both steps.
+- All tools run inside Singularity containers on identical hardware.
+
+See [Section 10](#10-benchmarks) and [`BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md)
+for multi-dataset results and thread-scaling data.
 
 ---
 
