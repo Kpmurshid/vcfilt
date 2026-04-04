@@ -5,15 +5,12 @@
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?logo=docker)](https://github.com/Kpmurshid/vcfilt/pkgs/container/vcfilt)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**vcfilt** is a streaming, batch-parallel VCF filtering tool implemented in Go.
-It filters VCF and VCF.GZ files by three site-level thresholds — `INFO/DP`,
-`INFO/AF`, and the fixed `QUAL` column — using a zero-allocation parser and a
-deterministic parallel pipeline.
+> **High-throughput, zero-allocation VCF filtering tool for `INFO/DP`, `INFO/AF`, and `QUAL` — optimized for large-scale genomic datasets.**
 
-The tool is designed for scenarios where filtering throughput is a bottleneck:
-large population cohort files, high-density whole-genome datasets, and automated
-pipelines where bcftools' general-purpose expression evaluator introduces unnecessary
-overhead.
+**vcfilt** is a streaming, batch-parallel VCF filtering tool implemented in Go.
+It filters VCF and VCF.GZ files by three site-level thresholds using a zero-allocation
+parser and a deterministic parallel pipeline. Benchmarked at **7× faster than
+bcftools** on 1000 Genomes chr20 (1.8M variants, 294MB BGZF).
 
 vcfilt is **not** a replacement for bcftools. It does not support arbitrary filter
 expressions, genotype-level filtering, annotation, or format conversion. Its scope
@@ -22,20 +19,43 @@ allocation-free.
 
 ---
 
+## ⚡ Quick Start
+
+```bash
+# Pull from Docker Hub
+docker pull kpmurshid/vcfilt:latest
+
+# Run on your VCF file
+docker run --rm -v $(pwd):/data kpmurshid/vcfilt:latest filter \
+  --input  /data/input.vcf.gz \
+  --output /data/output.vcf \
+  --dp-min 20 --af-max 0.01 --threads 8
+```
+
+Or install the pre-built binary:
+
+```bash
+curl -L https://github.com/Kpmurshid/vcfilt/releases/latest/download/vcfilt-linux-amd64.tar.gz \
+  | tar xz && mv vcfilt-linux-amd64 /usr/local/bin/vcfilt
+vcfilt filter --input variants.vcf.gz --output filtered.vcf --dp-min 10 --af-max 0.05
+```
+
+---
+
 ## Table of Contents
 
 1. [Performance Summary](#1-performance-summary)
 2. [Installation](#2-installation)
 3. [Command Reference](#3-command-reference)
-4. [Filter Semantics](#4-filter-semantics)
-5. [Deterministic Parallel Output](#5-deterministic-parallel-output)
-6. [I/O Behavior and Streaming Model](#6-io-behavior-and-streaming-model)
-7. [Error Handling and Edge Cases](#7-error-handling-and-edge-cases)
-8. [Indexing](#8-indexing)
-9. [Benchmarks](#9-benchmarks)
-10. [Scope and Limitations](#10-scope-and-limitations)
-11. [Relation to bcftools](#11-relation-to-bcftools)
-12. [Real-World Usage Examples](#12-real-world-usage-examples)
+4. [Real-World Usage Examples](#4-real-world-usage-examples)
+5. [Filter Semantics](#5-filter-semantics)
+6. [Deterministic Parallel Output](#6-deterministic-parallel-output)
+7. [I/O Behavior and Streaming Model](#7-io-behavior-and-streaming-model)
+8. [Error Handling and Edge Cases](#8-error-handling-and-edge-cases)
+9. [Indexing](#9-indexing)
+10. [Benchmarks](#10-benchmarks)
+11. [Scope and Limitations](#11-scope-and-limitations)
+12. [Relation to bcftools](#12-relation-to-bcftools)
 13. [VCF Specification Compliance](#13-vcf-specification-compliance)
 14. [Reproducibility](#14-reproducibility)
 15. [Troubleshooting](#15-troubleshooting)
@@ -70,7 +90,7 @@ Notes:
   shown is end-to-end for both steps.
 - All tools run inside Singularity containers on identical hardware.
 
-See [Section 9](#9-benchmarks) and [`BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md)
+See [Section 10](#10-benchmarks) and [`BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md)
 for multi-dataset results and thread-scaling data.
 
 ---
@@ -96,16 +116,16 @@ page.
 
 ```bash
 # Docker Hub
-docker pull Kpmurshid/vcfilt:latest
+docker pull kpmurshid/vcfilt:latest
 
 # GitHub Container Registry
-docker pull ghcr.io/Kpmurshid/vcfilt:latest
+docker pull ghcr.io/kpmurshid/vcfilt:latest
 
 # Singularity
-singularity pull vcfilt.sif docker://Kpmurshid/vcfilt:latest
+singularity pull vcfilt.sif docker://kpmurshid/vcfilt:latest
 
 # Run (Docker)
-docker run --rm -v "$(pwd):/data" Kpmurshid/vcfilt:latest filter \
+docker run --rm -v "$(pwd):/data" kpmurshid/vcfilt:latest filter \
   --input  /data/variants.vcf.gz \
   --output /data/filtered.vcf \
   --dp-min 10 --af-max 0.05 --threads 8
@@ -134,7 +154,7 @@ vcfilt filter [flags]
 
 | Flag | Type | Description |
 |------|------|-------------|
-| `--input FILE` | string | Input `.vcf` or `.vcf.gz` / BGZF file. Must be a regular file (not a pipe — see [Section 6](#6-io-behavior-and-streaming-model)). |
+| `--input FILE` | string | Input `.vcf` or `.vcf.gz` / BGZF file. Must be a regular file (not a pipe — see [Section 7](#7-io-behavior-and-streaming-model)). |
 | `--output FILE` | string | Output plain-text VCF file. Use `/dev/stdout` to write to standard output. |
 
 ### Filter flags
@@ -145,7 +165,7 @@ Passing a negative value also disables the filter.
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--dp-min FLOAT` | float64 | disabled (`-1`) | Minimum `INFO/DP`. Records with `DP < dp-min` are rejected. |
-| `--af-max FLOAT` | float64 | disabled (`NaN`) | Maximum `INFO/AF`. For multi-allelic sites, the minimum AF across all alleles is compared (see [Section 4](#4-filter-semantics)). |
+| `--af-max FLOAT` | float64 | disabled (`NaN`) | Maximum `INFO/AF`. For multi-allelic sites, the minimum AF across all alleles is compared (see [Section 5](#5-filter-semantics)). |
 | `--qual-min FLOAT` | float64 | disabled (`-1`) | Minimum `QUAL` column value. Records with `QUAL='.'` are rejected when this filter is active. |
 
 ### Performance flags
@@ -159,7 +179,7 @@ Passing a negative value also disables the filter.
 | Flag | Type | Description |
 |------|------|-------------|
 | `--stats` | bool | Print throughput statistics (variants/sec, pass rate, elapsed time) to stderr after completion. |
-| `--index` | bool | After filtering, bgzip-compress the output and create a `.tbi` tabix index. Requires coordinate-sorted input (see [Section 8](#8-indexing)). |
+| `--index` | bool | After filtering, bgzip-compress the output and create a `.tbi` tabix index. Requires coordinate-sorted input (see [Section 9](#9-indexing)). |
 | `--tabix-sif STRING` | string | Path to Singularity SIF image containing `bgzip` and `tabix`. Used when these tools are not on `$PATH`. |
 
 ### Exit codes
@@ -171,9 +191,84 @@ Passing a negative value also disables the filter.
 
 ---
 
-## 4. Filter Semantics
+## 4. Real-World Usage Examples
 
-### 4.1 Field sources
+### Whole Exome Sequencing — clinical variant triage
+
+```bash
+# Retain high-depth, rare, high-quality variants
+vcfilt filter \
+  --input  patient_WES.vcf \
+  --output candidate_variants.vcf \
+  --dp-min 20 --af-max 0.01 --qual-min 30 \
+  --threads 8 --stats
+```
+
+### Rare variant analysis (gnomAD / population databases)
+
+```bash
+# Extract ultra-rare variants (population AF < 0.1%)
+vcfilt filter \
+  --input  cohort_annotated.vcf.gz \
+  --output ultra_rare.vcf \
+  --af-max 0.001 --threads 16
+```
+
+### GWAS preprocessing — remove low-quality and low-depth sites
+
+```bash
+vcfilt filter \
+  --input  cohort_chr1.vcf.gz \
+  --output chr1_qc.vcf \
+  --dp-min 10 --qual-min 20 --threads 16
+```
+
+### 1000 Genomes / large population cohorts
+
+```bash
+# Filter all chromosomes in parallel (bash loop example)
+# Note: this launches 24 processes simultaneously, each using 4 threads.
+# Ensure sufficient CPU and I/O resources (96 goroutines total).
+for chr in {1..22} X Y; do
+  vcfilt filter \
+    --input  ALL.chr${chr}.vcf.gz \
+    --output chr${chr}_filtered.vcf \
+    --dp-min 10000 --af-max 0.05 \
+    --threads 4 &
+done
+wait
+```
+
+### Pipeline integration — write to stdout, pipe to downstream tools
+
+```bash
+# vcfilt output → bcftools stats (input must be a file, output can be stdout)
+vcfilt filter --input variants.vcf.gz --output /dev/stdout \
+  --dp-min 10 --af-max 0.05 2>/dev/null \
+  | bcftools stats - > filter_stats.txt
+
+# vcfilt → bgzip → tabix (manual equivalent of --index)
+vcfilt filter --input sorted.vcf.gz --output /dev/stdout \
+  --dp-min 10 2>/dev/null \
+  | bgzip > filtered.vcf.gz && tabix -p vcf filtered.vcf.gz
+```
+
+### With tabix indexing (sorted input required)
+
+```bash
+vcfilt filter \
+  --input  sorted.vcf.gz \
+  --output filtered.vcf \
+  --dp-min 10 --af-max 0.01 \
+  --index --tabix-sif /COLD_STORAGE/software/tools/tabix/tabix.sif
+# Output: filtered.vcf.gz and filtered.vcf.gz.tbi
+```
+
+---
+
+## 5. Filter Semantics
+
+### 5.1 Field sources
 
 vcfilt operates on three fields defined by the VCF specification:
 
@@ -189,7 +284,7 @@ vcfilt operates on three fields defined by the VCF specification:
 > aggregate site depth from `INFO/DP`, which matches the convention used in population
 > databases (1000 Genomes, gnomAD, dbSNP).
 
-### 4.2 Missing tag behavior
+### 5.2 Missing tag behavior
 
 When a filter is enabled and the corresponding tag is absent from a record, or is
 present but cannot be parsed as a valid number, the record is **rejected**.
@@ -205,7 +300,7 @@ tag is missing.
 | `QUAL` is `.` (missing per VCF spec) | **REJECTED** | PASSED |
 | `QUAL` present, not a valid number | **REJECTED** | PASSED |
 
-### 4.3 Multi-allelic sites — AF semantics
+### 5.3 Multi-allelic sites — AF semantics
 
 For multi-allelic sites, `INFO/AF` contains a comma-separated list of allele
 frequencies, one per alternate allele (VCF spec §1.6.1). vcfilt applies the
@@ -227,7 +322,7 @@ Record: INFO/AF=0.92,0.15    Filter: --af-max 0.10
 This is semantically equivalent to bcftools' expression `INFO/AF<=X`, which
 evaluates to `true` if **any** alternate allele satisfies the condition.
 
-### 4.4 Logical combination of filters
+### 5.4 Logical combination of filters
 
 All enabled filters are combined with logical AND. A record is written to the output
 only if it satisfies **every** active filter:
@@ -240,7 +335,7 @@ only if it satisfies **every** active filter:
 Filters not specified on the command line are completely inactive; the corresponding
 field is never read for those records.
 
-### 4.5 QUAL column
+### 5.5 QUAL column
 
 `QUAL` is the sixth column of the VCF fixed fields (1-indexed). Per the VCF
 specification, a value of `.` indicates that no quality score was computed. vcfilt
@@ -249,7 +344,7 @@ represents this internally as `NaN`. When `--qual-min` is active, records with
 
 ---
 
-## 5. Deterministic Parallel Output
+## 6. Deterministic Parallel Output
 
 vcfilt uses multiple goroutines to parse and filter records in parallel. This raises
 the question of whether the output order is guaranteed to match the input order.
@@ -276,7 +371,7 @@ No external sorting step is required or performed.
 
 ---
 
-## 6. I/O Behavior and Streaming Model
+## 7. I/O Behavior and Streaming Model
 
 ### Input
 
@@ -320,7 +415,7 @@ small files.
 
 ---
 
-## 7. Error Handling and Edge Cases
+## 8. Error Handling and Edge Cases
 
 | Situation | Behavior |
 |-----------|----------|
@@ -344,7 +439,7 @@ passes all other content through unmodified.
 
 ---
 
-## 8. Indexing
+## 9. Indexing
 
 When `--index` is specified, vcfilt runs two post-processing steps after the main
 filter:
@@ -387,9 +482,9 @@ vcfilt filter \
 
 ---
 
-## 9. Benchmarks
+## 10. Benchmarks
 
-### 9.1 Datasets
+### 10.1 Datasets
 
 | ID | File | Variants | Compressed size | Format | Source |
 |----|------|----------|----------------|--------|--------|
@@ -401,7 +496,7 @@ vcfilt filter \
 **Hardware:** AMD EPYC 9224, 48 logical CPUs (24 cores × 2-way SMT), 503 GB RAM,
 Linux 6.8. All tools executed within Singularity containers.
 
-### 9.2 Results
+### 10.2 Results
 
 **Dataset A — 1000 Genomes chr20 (Filter: `DP≥10000 AND AF≤0.05`)**
 
@@ -442,7 +537,7 @@ bcftools view -i 'INFO/DP>=10000 && INFO/AF<=0.05' \
 | bcftools 1.22 | 1 | 0.363 s | 12,683 |
 | vcftools 0.1.16 | 1 | 0.939 s | 12,683 |
 
-### 9.3 Thread scaling — Dataset B (plain VCF)
+### 10.3 Thread scaling — Dataset B (plain VCF)
 
 | Threads | Wall time | Speedup vs 1t |
 |---------|-----------|--------------|
@@ -464,7 +559,7 @@ rate), scaling beyond 8 threads may provide additional benefit.
 On BGZF-compressed input, a single decompression goroutine becomes the bottleneck
 regardless of thread count; additional threads have negligible effect on wall time.
 
-### 9.4 Why vcfilt is faster
+### 10.4 Why vcfilt is faster
 
 bcftools' `view -i` compiles a filter expression and evaluates it through a general-
 purpose expression engine (tokenisation, type-checking, field lookup by name) for
@@ -478,7 +573,7 @@ every record. vcfilt replaces this with:
 The trade-off is that vcfilt can only filter on the three fixed tags it knows about.
 This is a deliberate design choice.
 
-### 9.5 Correctness validation
+### 10.5 Correctness validation
 
 All benchmark results were validated against bcftools 1.22 as reference. 21 distinct
 filter-dataset combinations were tested. For each combination, the full output VCF of
@@ -489,7 +584,7 @@ are provided in [`BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md).
 
 ---
 
-## 10. Scope and Limitations
+## 11. Scope and Limitations
 
 The following are **intentional design exclusions**, not deficiencies:
 
@@ -501,13 +596,13 @@ The following are **intentional design exclusions**, not deficiencies:
 | Variant sorting | ❌ | Use `bcftools sort` before filtering |
 | Full VCF header validation | ❌ | Adds latency without filtering benefit |
 | BCF format input/output | ❌ | No htslib dependency; only plain VCF and gzip |
-| stdin as input | ❌ | Requires seekable file; see [Section 6](#6-io-behavior-and-streaming-model) |
+| stdin as input | ❌ | Requires seekable file; see [Section 7](#7-io-behavior-and-streaming-model) |
 | Compressed VCF output (without `--index`) | ❌ | Plain VCF output by default; use `--index` for bgzipped output |
 | Region-based filtering | ❌ | No tabix query support for input |
 
 ---
 
-## 11. Relation to bcftools
+## 12. Relation to bcftools
 
 vcfilt and bcftools are complementary tools, not competitors.
 
@@ -537,82 +632,6 @@ common filtering pattern.
 
 ---
 
-## 12. Real-World Usage Examples
-
-### Whole Exome Sequencing — clinical variant triage
-
-```bash
-# Retain high-depth, rare, high-quality variants
-vcfilt filter \
-  --input  patient_WES.vcf \
-  --output candidate_variants.vcf \
-  --dp-min 20 --af-max 0.01 --qual-min 30 \
-  --threads 8 --stats
-```
-
-### Rare variant analysis (gnomAD / population databases)
-
-```bash
-# Extract ultra-rare variants (population AF < 0.1%)
-vcfilt filter \
-  --input  cohort_annotated.vcf.gz \
-  --output ultra_rare.vcf \
-  --af-max 0.001 --threads 16
-```
-
-### GWAS preprocessing — remove low-quality and low-depth sites
-
-```bash
-vcfilt filter \
-  --input  cohort_chr1.vcf.gz \
-  --output chr1_qc.vcf \
-  --dp-min 10 --qual-min 20 --threads 16
-```
-
-### 1000 Genomes / large population cohorts
-
-```bash
-# Filter all chromosomes in parallel (bash loop example)
-# Note: this launches 24 processes simultaneously, each using 8 threads.
-# Ensure sufficient CPU and I/O resources before running (192 goroutines total).
-# Consider using `--threads 2` or `--threads 4` per process in resource-limited environments.
-for chr in {1..22} X Y; do
-  vcfilt filter \
-    --input  ALL.chr${chr}.vcf.gz \
-    --output chr${chr}_filtered.vcf \
-    --dp-min 10000 --af-max 0.05 \
-    --threads 4 &
-done
-wait
-```
-
-### Pipeline integration — write to stdout, pipe to downstream tools
-
-```bash
-# vcfilt output → bcftools stats (input must be a file, output can be stdout)
-vcfilt filter --input variants.vcf.gz --output /dev/stdout \
-  --dp-min 10 --af-max 0.05 2>/dev/null \
-  | bcftools stats - > filter_stats.txt
-
-# vcfilt → bgzip → tabix (manual equivalent of --index)
-vcfilt filter --input sorted.vcf.gz --output /dev/stdout \
-  --dp-min 10 2>/dev/null \
-  | bgzip > filtered.vcf.gz && tabix -p vcf filtered.vcf.gz
-```
-
-### With tabix indexing (sorted input required)
-
-```bash
-vcfilt filter \
-  --input  sorted.vcf.gz \
-  --output filtered.vcf \
-  --dp-min 10 --af-max 0.01 \
-  --index --tabix-sif /COLD_STORAGE/software/tools/tabix/tabix.sif
-# Output: filtered.vcf.gz and filtered.vcf.gz.tbi
-```
-
----
-
 ## 13. VCF Specification Compliance
 
 vcfilt processes files conforming to VCF specifications v4.1, v4.2, and v4.3. It
@@ -623,7 +642,7 @@ does not enforce the specification — it extracts only the fields it needs.
 | Header lines (`##`, `#CHROM`) | Copied verbatim to output |
 | Fixed columns (CHROM–INFO) | CHROM–FILTER passed through unchanged; INFO field is scanned for DP/AF |
 | FORMAT and sample columns | Ignored; passed through unchanged if present |
-| Multi-allelic `AF` (comma-separated) | Minimum value used (see [Section 4.3](#43-multi-allelic-sites--af-semantics)) |
+| Multi-allelic `AF` (comma-separated) | Minimum value used (see [Section 5.3](#53-multi-allelic-sites--af-semantics)) |
 | Missing value (`.`) | Treated as absent; conservative rejection when filter is active |
 | VCFv4.3 files | Fully supported; not subject to the VCFv4.3 restriction in vcftools |
 
@@ -727,7 +746,7 @@ If vcfilt is used in published research, please cite:
 
 ```
 vcfilt: A streaming, batch-parallel VCF filtering tool with zero-allocation parsing.
-DecipherGenomics (2026). https://github.com/Kpmurshid/vcfilt
+Kpmurshid (2026). https://github.com/Kpmurshid/vcfilt
 ```
 
 ---
