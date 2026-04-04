@@ -491,7 +491,7 @@ vcfilt filter \
 | A | `ALL.chr20.*.vcf.gz` | 1,817,492 | 294 MB | BGZF VCFv4.3 | 1000 Genomes Phase 3 (GRCh38) |
 | B | `large.vcf` | 1,000,000 | 92 MB | Plain VCFv4.1 | Synthetic (gen_test_vcf.py) |
 | C | `XX159.vcf` | 38,859 | 20 MB | Plain VCFv4.1 | IonTorrent TSVC (clinical WES) |
-| D | `XX.vcf.gz` | 35,000 | — | BGZF VCFv4.2 | DeepVariant germline |
+
 
 **Hardware:** AMD EPYC 9224, 48 logical CPUs (24 cores × 2-way SMT), 503 GB RAM,
 Linux 6.8. All tools executed within Singularity containers.
@@ -507,7 +507,6 @@ Linux 6.8. All tools executed within Singularity containers.
 | bcftools 1.22 | 1 | 134.3 s | 1,634,404 | ~13,500 var/s |
 | bcftools 1.22 | 16 | 136.6 s | 1,634,404 | ~13,300 var/s |
 | SnpSift 5.3 | 1 (piped) | 187.9 s | 1,634,404 | ~9,550 var/s |
-| vcftools 0.1.16 | — | FAILS | — | — |
 
 > bcftools `--threads` does not improve filter throughput on compressed VCF because
 > the filter expression evaluator is single-threaded; threading only accelerates BGZF
