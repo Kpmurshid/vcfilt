@@ -22,8 +22,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is set at build time via -ldflags.
-var version = "dev"
+// Version is set at build time via:
+//
+//	go build -ldflags="-X main.Version=v1.0.0" ./cmd/vcfilt/
+//
+// It defaults to "dev" when built without ldflags (e.g., plain `go build`).
+var Version = "dev"
 
 func main() {
 	if err := rootCmd().Execute(); err != nil {
@@ -40,7 +44,7 @@ func rootCmd() *cobra.Command {
 		Short: "High-performance VCF variant filter",
 		Long: `vcfilt — A lightweight, compiled CLI tool for filtering large VCF and
 VCF.GZ files using streaming and parallel processing with minimal memory usage.`,
-		Version: version,
+		Version: Version,
 	}
 	root.AddCommand(filterCmd())
 	return root
