@@ -143,11 +143,17 @@ Passing a negative value also disables the filter.
 |------|------|---------|-------------|
 | `--threads INT` | int | `runtime.NumCPU()` | Number of parallel filter worker goroutines. |
 
+### Filter flags (additional)
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--pass-only` | bool | Keep only variants where the FILTER column equals `PASS`. Records with any other FILTER value (including `.`) are rejected. |
+
 ### Output flags
 
 | Flag | Type | Description |
 |------|------|-------------|
-| `--stats` | bool | Print throughput statistics (variants/sec, pass rate, elapsed time) to stderr after completion. |
+| `--stats` | bool | Print summary statistics to stderr after completion, including: total variants processed, variants passed, variants filtered out, throughput (variants/sec), and elapsed time. |
 | `--index` | bool | After filtering, bgzip-compress the output and create a `.tbi` tabix index. Requires coordinate-sorted input (see [Section 9](#9-indexing)). |
 | `--tabix-sif STRING` | string | Path to Singularity SIF image containing `bgzip` and `tabix`. Used when these tools are not on `$PATH`. |
 
@@ -162,32 +168,41 @@ Passing a negative value also disables the filter.
 
 ## 3. Performance Summary
 
-**Dataset:** 1000 Genomes Project chr20 — 1,817,492 variants, 294 MB
-BGZF-compressed VCFv4.3 (`ALL.chr20.shapeit2_integrated_snvindels_v2a_27022019.GRCh38.phased.vcf.gz`)  
-**Filter applied:** `INFO/DP ≥ 10,000 AND INFO/AF ≤ 0.05`  
-**Result:** 1,634,404 variants pass (all tools agree)  
-**Hardware:** AMD EPYC 9224, 48 logical CPUs (24 cores × 2-way SMT), Linux 6.8
+**Dataset:** 1000 Genomes Project chr20 — 1,811,146 variants  
+**Files tested:** `chr20.vcf` (18 GB plain VCF) and `ALL.chr20_GRCh38.genotypes.20170504.vcf.gz` (348 MB gzip)  
+**Filters applied:** `--pass-only --qual-min 50 --dp-min 1000`  
+**Hardware:** AMD EPYC 9224, 48 logical CPUs (24 cores × 2-way SMT), 503 GB RAM, Linux 6.8
 
-| Tool | Version | Threads used | Wall time | Output variants |
-|------|---------|-------------|-----------|----------------|
-| **vcfilt** | 1.0.0 | 4 | **18.6 s** | 1,634,404 |
-| GATK SelectVariants | 4.6.2 | 1 | 42.7 s | 1,634,404 |
-| bcftools view | 1.22 | 1–16 | 134–137 s | 1,634,404 |
-| SnpSift filter | 5.3 | 1 | 187.9 s | 1,634,404 |
-| vcftools | 0.1.16 | — | **FAILS** | — |
+### Fair 1-thread comparison (same conditions for all tools)
 
-Notes:
-- bcftools was tested with `--threads 1`, `4`, `8`, and `16`; wall time was
-  134–137 s across all thread counts. bcftools `--threads` parallelises BGZF
-  decompression only, not filter evaluation.
-- vcftools fails with: `Error: VCF version must be v4.0, v4.1 or v4.2`. It does
-  not support VCFv4.3.
-- GATK requires two commands (`VariantFiltration` then `SelectVariants`); time
-  shown is end-to-end for both steps.
-- All tools run inside Singularity containers on identical hardware.
+| Tool | Input | Threads | Wall time | Speed-up |
+|------|-------|---------|-----------|---------|
+| **vcfilt** | plain VCF (18 GB) | **1** | **12.3 s** | **12.2× faster than bcftools** |
+| bcftools 1.18 | plain VCF (18 GB) | 1 | 149.5 s | 1× (baseline) |
+| vcftools 0.5 | plain VCF (18 GB) | 1 | 880.1 s | 0.17× |
+| **vcfilt** | gzip VCF (348 MB) | **1** | **20.0 s** | **7.9× faster than bcftools** |
+| bcftools 1.18 | gzip VCF (348 MB) | 1 | 157.8 s | 1× (baseline) |
 
-See [Section 10](#10-benchmarks) and [`BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md)
-for multi-dataset results and thread-scaling data.
+> All tools produce **identical output** — record counts verified to match bcftools exactly for all scenarios.
+
+### Throughput (1-thread, all filters)
+
+| Tool | Format | Throughput |
+|------|--------|-----------|
+| **vcfilt** | plain VCF | **147,000 var/s** |
+| **vcfilt** | gzip VCF | **90,600 var/s** |
+| bcftools | plain VCF | 12,100 var/s |
+| bcftools | gzip VCF | 11,500 var/s |
+| vcftools | plain VCF | 2,100 var/s |
+
+### Benchmark plots
+
+![Speed-up summary](benchmark_plots/fig4_speedup_summary.png)
+
+![Plain VCF comparison](benchmark_plots/fig1_plain_vcf_comparison.png)
+
+Benchmark filters vary by dataset and are explicitly specified for each experiment. See [Section 10](#10-benchmarks) and [`BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md)
+for full multi-scenario results, thread-scaling data, and correctness verification.
 
 ---
 
@@ -340,7 +355,26 @@ field is never read for those records.
 `QUAL` is the sixth column of the VCF fixed fields (1-indexed). Per the VCF
 specification, a value of `.` indicates that no quality score was computed. vcfilt
 represents this internally as `NaN`. When `--qual-min` is active, records with
-`QUAL='.'` are rejected.
+`QUAL='.'` are **rejected** — the dot is never treated as passing any numeric threshold.
+
+### 5.6 FILTER column (PASS semantics)
+
+When `--pass-only` is enabled, vcfilt inspects the FILTER column (column 7, 1-indexed)
+of each data record and applies the following rule:
+
+- Records with `FILTER=PASS` are **retained**.
+- Records with any other FILTER value — including multi-value strings such as
+  `LowQual;LowDepth`, and the VCF missing-value sentinel `.` — are **rejected**.
+
+> **Dot (`.`) handling:** A FILTER value of `.` indicates that no filters have been
+> applied to the record (the site is unfiltered but not explicitly passed). vcfilt
+> treats `.` as a non-PASS value: such records are **rejected** when `--pass-only`
+> is active. This is consistent with the behaviour of `bcftools view -f PASS`, which
+> also excludes `.`-filtered sites by default.
+
+When combined with other filters (`--dp-min`, `--af-max`, `--qual-min`), the PASS
+check is combined with logical AND — a record must satisfy every active filter to
+be written to the output.
 
 ---
 

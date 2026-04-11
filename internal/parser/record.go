@@ -14,7 +14,13 @@ type Record struct {
 	// Raw is the original unmodified line (no newline).
 	Raw []byte
 
-	// Parsed scalar fields
+	// FilterRaw is the raw byte slice of the FILTER column (column 6, 0-based).
+	// It points directly into Raw — zero allocation, no copy.
+	// A nil slice means the column was not reached (malformed line).
+	FilterRaw []byte
+
+	// Parsed scalar fields.
+	// Qual is math.NaN() when the QUAL column is "." or unparseable.
 	Qual float64
 
 	// INFO-extracted values; NaN means "not present".
@@ -25,9 +31,18 @@ type Record struct {
 // NaN sentinel used when a tag is absent.
 var nanVal = math.NaN()
 
+// passBytesLiteral is the expected byte content of a passing FILTER column.
+// Declared as a package-level var so it is allocated once.
+var passBytesLiteral = []byte("PASS")
+
 // ParseRecord parses a raw VCF data line (must NOT start with '#').
 // It fills only the fields needed for filtering; everything else stays in Raw.
 // Returns false when the line is malformed (fewer than 8 tab-separated columns).
+//
+// Column extraction (0-based):
+//   - 5 → QUAL  (float or "." → NaN)
+//   - 6 → FILTER (raw slice into Raw; no copy)
+//   - 7 → INFO  (DP= and AF= tags extracted)
 func ParseRecord(line []byte) (Record, bool) {
 	r := Record{
 		Raw: line,
@@ -35,27 +50,33 @@ func ParseRecord(line []byte) (Record, bool) {
 		AF:  nanVal,
 	}
 
-	// We need columns 5 (QUAL, 0-indexed) and 7 (INFO, 0-indexed).
 	// Walk the line with a manual tab counter to avoid allocations.
+	// We need columns 5 (QUAL), 6 (FILTER), and 7 (INFO).
 	col := 0
 	start := 0
 
 	for i := 0; i <= len(line); i++ {
 		if i == len(line) || line[i] == '\t' {
 			switch col {
-			case 5: // QUAL
+			case 5: // QUAL — float or "." → NaN
 				seg := line[start:i]
 				if len(seg) == 1 && seg[0] == '.' {
+					// "." means missing QUAL — treated as NaN so that
+					// --qual-min will reject this record (conservative).
 					r.Qual = math.NaN()
 				} else {
 					q, err := strconv.ParseFloat(bytesToString(seg), 64)
 					if err == nil {
 						r.Qual = q
 					} else {
+						// Unparseable QUAL → NaN → rejected when --qual-min is active.
 						r.Qual = math.NaN()
 					}
 				}
-			case 7: // INFO
+			case 6: // FILTER — keep a zero-copy slice into Raw
+				// FilterRaw points into the original line buffer; no allocation.
+				r.FilterRaw = line[start:i]
+			case 7: // INFO — extract DP= and AF=, then stop
 				extractInfoTags(line[start:i], &r)
 				// INFO is the last column we care about — stop early.
 				return r, true

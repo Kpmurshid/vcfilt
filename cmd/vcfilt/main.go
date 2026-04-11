@@ -59,6 +59,7 @@ func filterCmd() *cobra.Command {
 		dpMin     float64
 		afMax     float64
 		qualMin   float64
+		passOnly  bool
 		threads   int
 		showStats bool
 		doIndex   bool
@@ -67,13 +68,16 @@ func filterCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "filter",
-		Short: "Filter VCF records by DP, AF, and QUAL thresholds",
+		Short: "Filter VCF records by DP, AF, QUAL, and FILTER column",
 		Long: `Filter variants from a VCF or VCF.GZ file.
 
-Filtering rules (all enabled filters must pass):
-  --dp-min    Minimum sequencing depth (DP in INFO field)
-  --af-max    Maximum allele frequency (AF in INFO field; minimum across alleles for multi-allelic sites)
-  --qual-min  Minimum variant quality (QUAL column)
+Filtering rules (all enabled filters must pass — AND semantics):
+  --dp-min     Minimum sequencing depth (DP in INFO field)
+  --af-max     Maximum allele frequency (AF in INFO field; minimum across alleles for multi-allelic sites)
+  --qual-min   Minimum variant quality (QUAL column, col 5); "." → rejected
+  --pass-only  Keep only records where FILTER column (col 6) == "PASS"
+               Note: FILTER="." is treated as NOT PASS and is excluded.
+               This matches bcftools view -f PASS behaviour.
 
 Records missing a required tag when its filter is enabled are rejected.
 
@@ -89,12 +93,13 @@ Example:
     --dp-min  10 \
     --af-max  0.01 \
     --qual-min 30 \
+    --pass-only \
     --threads  8 \
     --index \
     --tabix-sif /COLD_STORAGE/software/tools/tabix/tabix.sif \
     --stats`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runFilter(input, output, dpMin, afMax, qualMin, threads, showStats, doIndex, tabixSIF)
+			return runFilter(input, output, dpMin, afMax, qualMin, passOnly, threads, showStats, doIndex, tabixSIF)
 		},
 	}
 
@@ -103,6 +108,7 @@ Example:
 	cmd.Flags().Float64Var(&dpMin, "dp-min", -1, "Minimum depth (DP); disabled if negative")
 	cmd.Flags().Float64Var(&afMax, "af-max", math.NaN(), "Maximum allele frequency (AF); disabled if negative or NaN")
 	cmd.Flags().Float64Var(&qualMin, "qual-min", -1, "Minimum quality (QUAL); disabled if negative")
+	cmd.Flags().BoolVar(&passOnly, "pass-only", false, `Keep only records where FILTER=="PASS"; FILTER="." is excluded`)
 	cmd.Flags().IntVar(&threads, "threads", runtime.NumCPU(), "Number of parallel filter workers")
 	cmd.Flags().BoolVar(&showStats, "stats", false, "Print processing statistics to stderr after completion")
 	cmd.Flags().BoolVar(&doIndex, "index", false, "bgzip + tabix-index the output VCF (requires sorted input)")
@@ -119,6 +125,7 @@ Example:
 func runFilter(
 	input, output string,
 	dpMin, afMax, qualMin float64,
+	passOnly bool,
 	threads int,
 	showStats bool,
 	doIndex bool,
@@ -130,7 +137,7 @@ func runFilter(
 	}
 
 	// Build filter configuration.
-	filterCfg := filter.NewConfig(dpMin, afMax, qualMin)
+	filterCfg := filter.NewConfig(dpMin, afMax, qualMin, passOnly)
 
 	// Print active filter summary.
 	printFilterSummary(filterCfg, threads, input, output, doIndex)
@@ -207,19 +214,24 @@ func printFilterSummary(cfg filter.Config, threads int, input, output string, do
 	fmt.Fprintf(os.Stderr, "  Threads: %d\n", threads)
 	fmt.Fprintln(os.Stderr, "  Filters:")
 	if cfg.DPMinEnabled {
-		fmt.Fprintf(os.Stderr, "    DP   >= %.0f\n", cfg.DPMin)
+		fmt.Fprintf(os.Stderr, "    DP       >= %.0f\n", cfg.DPMin)
 	} else {
-		fmt.Fprintln(os.Stderr, "    DP   : disabled")
+		fmt.Fprintln(os.Stderr, "    DP       : disabled")
 	}
 	if cfg.AFMaxEnabled {
-		fmt.Fprintf(os.Stderr, "    AF   <= %.6f\n", cfg.AFMax)
+		fmt.Fprintf(os.Stderr, "    AF       <= %.6f\n", cfg.AFMax)
 	} else {
-		fmt.Fprintln(os.Stderr, "    AF   : disabled")
+		fmt.Fprintln(os.Stderr, "    AF       : disabled")
 	}
 	if cfg.QualMinEnabled {
-		fmt.Fprintf(os.Stderr, "    QUAL >= %.0f\n", cfg.QualMin)
+		fmt.Fprintf(os.Stderr, "    QUAL     >= %.0f\n", cfg.QualMin)
 	} else {
-		fmt.Fprintln(os.Stderr, "    QUAL : disabled")
+		fmt.Fprintln(os.Stderr, "    QUAL     : disabled")
+	}
+	if cfg.PassOnly {
+		fmt.Fprintln(os.Stderr, "    FILTER   == PASS (dot '.' excluded)")
+	} else {
+		fmt.Fprintln(os.Stderr, "    FILTER   : disabled (all values pass)")
 	}
 	if doIndex {
 		fmt.Fprintln(os.Stderr, "  Index  : bgzip + tabix (enabled)")
