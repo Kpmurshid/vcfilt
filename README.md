@@ -1,5 +1,6 @@
 # vcfilt
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19548662.svg)](https://doi.org/10.5281/zenodo.19548662)
 [![CI](https://github.com/Kpmurshid/vcfilt/actions/workflows/ci.yml/badge.svg)](https://github.com/Kpmurshid/vcfilt/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://golang.org)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?logo=docker)](https://github.com/Kpmurshid/vcfilt/pkgs/container/vcfilt)
@@ -778,8 +779,8 @@ BenchmarkPass-48               1,000,000,000      3 ns/op    0 B/op    0 allocs/
 If vcfilt is used in published research, please cite:
 
 ```
-vcfilt: A streaming, batch-parallel VCF filtering tool with zero-allocation parsing.
-Kpmurshid (2026). https://github.com/Kpmurshid/vcfilt
+Murshid KP (2026). *vcfilt: High-performance streaming VCF filter*.  
+DOI: https://doi.org/10.5281/zenodo.19548662
 ```
 
 ---
