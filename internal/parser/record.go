@@ -31,10 +31,6 @@ type Record struct {
 // NaN sentinel used when a tag is absent.
 var nanVal = math.NaN()
 
-// passBytesLiteral is the expected byte content of a passing FILTER column.
-// Declared as a package-level var so it is allocated once.
-var passBytesLiteral = []byte("PASS")
-
 // ParseRecord parses a raw VCF data line (must NOT start with '#').
 // It fills only the fields needed for filtering; everything else stays in Raw.
 // Returns false when the line is malformed (fewer than 8 tab-separated columns).
